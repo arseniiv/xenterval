@@ -1,0 +1,35 @@
+[tool.poetry]
+name = "xenterval"
+version = "0.1.0"
+description = "Xenharmonic theory utilities and more."
+license = "MIT"
+authors = ["arseniiv <arseniiv@gmail.com>"]
+readme = "README.md"
+repository = "https://github.com/arseniiv/xenterval"
+keywords = ["xenharmonic", "microtonal", "music theory"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Framework :: Pytest",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Text Processing",
+    "Topic :: Utilities",
+    "Typing :: Typed"
+]
+include = ["CHANGELOG.md"]
+
+[tool.poetry.urls]
+"Bug Tracker" = "https://github.com/arseniiv/xenterval/issues"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+more-itertools = "^8.6.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.2"
+mypy = "^0.910"
+pylint = "^2.6.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
