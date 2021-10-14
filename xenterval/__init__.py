@@ -11,7 +11,7 @@ from xenterval.ji import *
 from xenterval.interval.name.fjs import *
 from xenterval.interval.name.color import *
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 
 #TODO? <https://en.xen.wiki/w/SHEFKHED_interval_names>
@@ -22,6 +22,7 @@ __version__ = '0.1.0'
 # convergents (and semi-convergents) to arbitrary intervals?
 # edo-step (“)convergents(”) (what are they?)?
 
+#TODO? write real tests?
 
 def _main():
     """Tests and some other things, don’t run if you don’t know why."""

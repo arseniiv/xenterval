@@ -40,7 +40,8 @@ class GroupedTuning(IntervalTuning):
 
 def regular_tuning(step_count: int, group: Interval) -> GroupedTuning:
     assert step_count > 0
-    intervals = (group.multiply(index / step_count) for index in range(1, step_count + 1))
+    intervals = (group.multiply(index / step_count)
+                 for index in range(1, step_count + 1))
     return GroupedTuning(tuple(intervals))
 
 

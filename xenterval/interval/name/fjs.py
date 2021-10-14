@@ -2,16 +2,15 @@ from __future__ import annotations
 from typing import final, Final, Sequence, Iterator, Mapping
 from dataclasses import dataclass
 from fractions import Fraction
-from math import log2, floor
+from math import log2, floor, sqrt
 from xenterval._common import KNOWN_PRIMES, Rat
 from xenterval.interval import Interval
 from xenterval.ji import Monzo
 
 __all__ = ('FJS', 'FJSName')
 
-# pylint: disable=unsubscriptable-object
 
-_SQRT2: Final[float] = 2 ** 0.5
+_SQRT2: Final[float] = sqrt(2)
 
 
 @final

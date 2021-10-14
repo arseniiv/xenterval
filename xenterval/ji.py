@@ -5,22 +5,34 @@ from functools import cached_property, lru_cache
 from fractions import Fraction
 from math import prod
 from more_itertools import pairwise
-from xenterval._common import Rat, RatFloat, KNOWN_PRIMES
+from xenterval._common import Rat, RatFloat, KNOWN_PRIMES, prime_index
 
-__all__ = ('known_primes', 'Monzo', 'JISubgroup',)
+__all__ = ('known_primes', 'known_prime_index', 'Monzo', 'JISubgroup',)
 
 #_TR = TypeVar('_TR', int, Rat)
 #_TR = TypeVar('_TR', bound=Rat)
 _TR = TypeVar('_TR', int, Fraction)
+
 
 def known_primes() -> Sequence[int]:
     """All the primes this package may use."""
 
     return KNOWN_PRIMES
 
+def known_prime_index(p: int) -> int | None:
+    """Get an index of a prime in `known_primes()`, or None."""
+
+    try:
+        return prime_index(p)
+    except ValueError:
+        return None
+
+
 @final
 class Monzo(Generic[_TR]):
     """A monzo."""
+
+    __match_args__ = ('entries',)
 
     def __init__(self, *entries: _TR) -> None:
         """Make a monzo from its entries, which can be `int`s or `Fraction`s."""
@@ -42,6 +54,9 @@ class Monzo(Generic[_TR]):
 
     def entry_at(self, index: int) -> int | _TR:
         return self._entries[index] if index < len(self) else 0
+
+    def entry_at_prime(self, p: int) -> int | _TR:
+        return self.entry_at(prime_index(p))
 
     def __len__(self) -> int:
         return len(self._entries)
@@ -106,10 +121,6 @@ class Monzo(Generic[_TR]):
         # pylint: disable=protected-access
         ext_elems = (m._extended_entries(length) for m, _ in elems)
         ks = tuple(k for _, k in elems)
-        # entries = (sum(e * k for e, k in zip(single_entries, ks))
-        #                      for single_entries in cast(
-        #                          'Iterator[tuple[_TR, ...]]',
-        #                          zip(*ext_elems)))
         entries = (sum(e * k for e, k in zip(single_entries, ks))
                              for single_entries in zip(*ext_elems))
         return Monzo(*entries)
@@ -147,7 +158,7 @@ class Monzo(Generic[_TR]):
     @lru_cache
     def from_ratio(ratio: Rat) -> Monzo[int]:
         """Get a ratio’s monzo."""
-        # hopefully rations wouldn’t get that complex;
+        # hopefully ratios wouldn’t get that complex;
         # use a simple factorization method
 
         def p_adic_val(n: int, p: int) -> tuple[int, int]:

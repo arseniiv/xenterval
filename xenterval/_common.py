@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Final
 from fractions import Fraction
-from bisect import bisect
+from bisect import bisect_left
 
 __all__ = ('Rat', 'RatFloat', 'KNOWN_PRIMES', 'prime_index',)
 
@@ -17,7 +17,7 @@ KNOWN_PRIMES: Final[tuple[int, ...]] = (
     179, 181, 191, 193, 197, 199, 211, 223, 227, 229,)
 
 def prime_index(p: int) -> int:
-    index = bisect(KNOWN_PRIMES, p)
+    index = bisect_left(KNOWN_PRIMES, p)
     if KNOWN_PRIMES[index] == p:
         return index
     raise ValueError('Either this is not a prime or it’s too large.')

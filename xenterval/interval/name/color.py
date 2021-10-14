@@ -8,7 +8,6 @@ from xenterval.ji import Monzo
 
 __all__ = ('color_name', 'color_val')
 
-# pylint: disable=unsubscriptable-object
 
 _SUP_TRANSLATION: Final[dict[int, int | None]] = str.maketrans('0123456789', '⁰¹²³⁴⁵⁶⁷⁸⁹')
 
