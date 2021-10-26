@@ -18,6 +18,6 @@ KNOWN_PRIMES: Final[tuple[int, ...]] = (
 
 def prime_index(p: int) -> int:
     index = bisect_left(KNOWN_PRIMES, p)
-    if KNOWN_PRIMES[index] == p:
+    if index < len(KNOWN_PRIMES) and KNOWN_PRIMES[index] == p:
         return index
     raise ValueError('Either this is not a prime or it’s too large.')

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "xenterval"
-version = "0.1.1"
+version = "0.1.2"
 description = "Xenharmonic theory utilities and more."
 license = "MIT"
 authors = ["arseniiv <arseniiv@gmail.com>"]

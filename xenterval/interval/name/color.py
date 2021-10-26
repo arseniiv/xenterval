@@ -12,6 +12,8 @@ __all__ = ('color_name', 'color_val')
 _SUP_TRANSLATION: Final[dict[int, int | None]] = str.maketrans('0123456789', '⁰¹²³⁴⁵⁶⁷⁸⁹')
 
 def color_name(m: Monzo[int]) -> str:
+    """Name an interval using Kite’s color notation."""
+
     def multiplied(s: str, n: int) -> str:
         n = abs(n)
         if n < 2:
@@ -55,14 +57,16 @@ def color_name(m: Monzo[int]) -> str:
 
 @lru_cache
 def color_val() -> tuple[int, ...]:
-    degrees_24edo = (0, 1, 1, 1, 1, 2, # 0 — 50 — 100 — 150 — 200 — 250 — 300
-                     2, 2, 2, 3, 3, 3, # 300 — ... — 600
-                     4, 4, 4, 5, 5, 5, # 600 — ... — 900
-                     5, 6, 6, 6, 6, 7) # 900 — ... — 1200
+    """24edo val for deciding which degree an interval is."""
+
+    degrees_24edo = (0, 1, 1, 1, 1, 2,  # 0 — 50 — 100 — 150 — 200 — 250 — 300
+                     2, 2, 2, 3, 3, 3,  # 300 — ... — 600
+                     4, 4, 4, 5, 5, 5,  # 600 — ... — 900
+                     5, 6, 6, 6, 6, 7)  # 900 — ... — 1200
 
     def gen() -> Iterator[int]:
         for p in KNOWN_PRIMES:
-            cents = Interval.from_ratio(p).cents
+            cents = Interval(ratio=p).cents
             octaves, reduced_cents = divmod(cents, 1200)
             reduced_steps = degrees_24edo[floor(reduced_cents / 50)]
             yield reduced_steps + round(octaves) * 7

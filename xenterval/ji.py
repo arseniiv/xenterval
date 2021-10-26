@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Sequence, final, Final, TypeVar, Generic, overload, Iterator
+from typing import Sequence, TypeAlias, final, Final, TypeVar, Generic, overload, Iterator
 from itertools import islice
 from functools import cached_property, lru_cache
 from fractions import Fraction
@@ -12,6 +12,7 @@ __all__ = ('known_primes', 'known_prime_index', 'Monzo', 'JISubgroup',)
 #_TR = TypeVar('_TR', int, Rat)
 #_TR = TypeVar('_TR', bound=Rat)
 _TR = TypeVar('_TR', int, Fraction)
+MonzoRat: TypeAlias = 'Monzo[int] | Monzo[Fraction]'
 
 
 def known_primes() -> Sequence[int]:
@@ -34,7 +35,7 @@ class Monzo(Generic[_TR]):
 
     __match_args__ = ('entries',)
 
-    def __init__(self, *entries: _TR) -> None:
+    def __init__(self, *entries: int | _TR) -> None:
         """Make a monzo from its entries, which can be `int`s or `Fraction`s."""
 
         # strip unnecessary zeros
@@ -46,13 +47,15 @@ class Monzo(Generic[_TR]):
             entries = ()
         if len(entries) > len(KNOWN_PRIMES):
             raise ValueError('There are more entries than primes I know of.')
-        self._entries: Final[tuple[_TR, ...]] = entries
+        self._entries: Final[tuple[int | _TR, ...]] = entries
 
     @property
-    def entries(self) -> tuple[_TR, ...]:
+    def entries(self) -> tuple[int | _TR, ...]:
         return self._entries
 
     def entry_at(self, index: int) -> int | _TR:
+        if index < 0:
+            raise ValueError('Index should be nonnegative.')
         return self._entries[index] if index < len(self) else 0
 
     def entry_at_prime(self, p: int) -> int | _TR:
@@ -83,7 +86,7 @@ class Monzo(Generic[_TR]):
             return " * ".join(gen())
         raise ValueError(f'Unknown format spec: {spec}. Use "", "s" or "d".')
 
-    def _extended_entries(self, length: int) -> tuple[_TR, ...]:
+    def _extended_entries(self, length: int) -> tuple[int | _TR, ...]:
         entries = self._entries
         extra = length - len(entries)
         if extra > 0:
@@ -111,7 +114,16 @@ class Monzo(Generic[_TR]):
     def lin_comb(*elems: tuple[Monzo[int], int]) -> Monzo[int]: ...
     @overload
     @staticmethod
+    def lin_comb(*elems: tuple[Monzo[int], Fraction]) -> Monzo[Fraction]: ...
+    @overload
+    @staticmethod
+    def lin_comb(*elems: tuple[Monzo[int], int | Fraction]) -> MonzoRat: ...
+    @overload
+    @staticmethod
     def lin_comb(*elems: tuple[Monzo[Fraction], Rat]) -> Monzo[Fraction]: ...
+    @overload
+    @staticmethod
+    def lin_comb(*elems: tuple[MonzoRat, Rat]) -> MonzoRat: ...
     @staticmethod
     #def lin_comb(*elems: tuple[Monzo[_TR], int | _TR]) -> Monzo[_TR]:
     def lin_comb(*elems):
@@ -131,14 +143,14 @@ class Monzo(Generic[_TR]):
 
         return KNOWN_PRIMES[len(self) - 1] if self else -1
 
-    def primes_exponents(self, start: int = 0, stop: int | None = None) -> tuple[tuple[int, _TR], ...]:
-        """Return a tuple of pairs (prime, exponent) for the number this monzo represents."""
+    def primes_exponents(self, start: int = 0, stop: int | None = None) -> tuple[tuple[int, int | _TR], ...]:
+        """Return a tuple of pairs (prime, exponent) for the number this monzo represents, with only nonzero exponents."""
 
         all_ = zip(KNOWN_PRIMES, self._entries)
         return tuple((p, x) for p, x in islice(all_, start, stop) if x != 0)
 
     @overload
-    def ratio(self: Monzo[int]) -> Fraction: ...
+    def ratio(self: Monzo[int]) -> Rat: ...
     @overload
     #def ratio(self: Monzo[Rat]) -> float: ...
     #def ratio(self: Monzo[Rat]) -> RatFloat: ...
@@ -201,11 +213,12 @@ class JISubgroup:
     def __init__(self, *generators: Rat):
         """Make a JI subgroup from a normal list of its generators.
 
-           Normalness and independence of generators are checked.
+        Normalness and independence of generators are checked.
         """
+
         # check normality
         if any((bad_g := g) <= 1 for g in generators):
-            # pylint: disable=undefined-variable #TODO? remove when possible
+            # pylint: disable=undefined-variable
             raise ValueError(f'Should be a normal list but {bad_g} <= 1.')
         gen_monzos = tuple(Monzo.from_ratio(g) for g in generators)
         for  m1, m2 in pairwise(gen_monzos):
@@ -217,6 +230,8 @@ class JISubgroup:
 
     @staticmethod
     def p_limit(p: int) -> JISubgroup:
+        """Produce a p-limit group."""
+
         for i, kp in enumerate(KNOWN_PRIMES):
             if p == kp:
                 return JISubgroup(*KNOWN_PRIMES[:i + 1])
@@ -227,10 +242,15 @@ class JISubgroup:
     def __str__(self) -> str:
         return '.'.join(str(x) for x in self.generators)
 
-    __repr__ = __str__ # I prefer readability of tuples etc.
+    __repr__ = __str__  # I prefer readability of tuples etc.
 
-    def __contains__(self, elem: Rat | Monzo[int]) -> bool:
-        if isinstance(elem, int | Fraction):
+    def contains(self, elem: Rat | MonzoRat) -> bool:
+        """Determine if elem lies in this subgroup."""
+
+        if isinstance(elem, Monzo):
+            if any(e.denominator != 1 for e in elem.entries):
+                raise ValueError('Fractional monzo is never in a JI subgroup.')
+        else:
             elem = Monzo.from_ratio(elem)
         for m in reversed(self.gen_monzos):
             if not elem: # unison
@@ -244,5 +264,50 @@ class JISubgroup:
             if rem != 0:
                 return False
             elem = Monzo.lin_comb((elem, 1), (m, -quot))
-            assert len(elem) < len(m) #TODO later delete this
         return not elem
+
+    def is_subgroup_of(self, other: JISubgroup) -> bool:
+        """Whether this group is a subgroup of another."""
+
+        return all(other.contains(m) for m in reversed(self.gen_monzos))
+
+    def isomorphic(self, other: JISubgroup) -> bool:
+        """Whether the two groups are subgroups of each other."""
+
+        if self.limit != other.limit:
+            return False
+        return (self.is_subgroup_of(other) and
+                other.is_subgroup_of(self))
+
+    def __contains__(self, elem: Rat | MonzoRat) -> bool:
+        """`elem in self == self.contains(elem)`"""
+
+        return self.contains(elem)
+
+    def __le__(self, other: JISubgroup) -> bool:
+        """`self <= other == self.is_subgroup_of(other)`"""
+
+        if isinstance(other, JISubgroup):
+            return self.is_subgroup_of(other)
+        return NotImplemented
+
+    def __ge__(self, other: JISubgroup) -> bool:
+        """`self >= other == other.is_subgroup_of(self)`"""
+
+        if isinstance(other, JISubgroup):
+            return other.is_subgroup_of(self)
+        return NotImplemented
+
+    def __eq__(self, other: object) -> bool:
+        """`(self == other) == self.isomorphic(other)`"""
+
+        if isinstance(other, JISubgroup):
+            return self.isomorphic(other)
+        return False
+
+    def __ne__(self, other: object) -> bool:
+        """`(self != other) == self.isomorphic(other)`"""
+
+        if isinstance(other, JISubgroup):
+            return not self.isomorphic(other)
+        return True

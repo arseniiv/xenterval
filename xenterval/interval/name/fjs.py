@@ -10,6 +10,9 @@ from xenterval.ji import Monzo
 __all__ = ('FJS', 'FJSName')
 
 
+#TODO? Neutral FJS
+
+
 _SQRT2: Final[float] = sqrt(2)
 
 
@@ -17,7 +20,7 @@ _SQRT2: Final[float] = sqrt(2)
 class FJS:
     """Naming of intervals using FJS.
     
-       See <https://misotanni.github.io/fjs/en/index.html>."""
+    See <https://misotanni.github.io/fjs/en/index.html>."""
     _radius_cents: Final[float]
     commas: Final[Sequence[Monzo[int]]]
 
@@ -41,17 +44,21 @@ class FJS:
         radius = self._radius_cents
         for k in all_shifts():
             comma = reduced_balanced(p * three ** -k)
-            if abs(float(Interval.from_ratio(comma).cents)) < radius:
+            if abs(float(Interval(ratio=comma).cents)) < radius:
                 return Monzo.from_ratio(comma)
         assert False, 'Unreachable'
 
     def __init__(self, tolerance_radius: float = 65 / 63) -> None:
-        """Set custom radius of tolerance only if you want to experiment."""
+        """Initialize an FJS namer.
+        Set custom radius of tolerance only if you want to experiment."""
+
         assert tolerance_radius > 0
-        self._radius_cents = float(Interval.from_ratio(tolerance_radius).cents)
+        self._radius_cents = float(Interval(ratio=tolerance_radius).cents)
         self.commas = tuple(self._formal_comma(p) for p in KNOWN_PRIMES[2:])
 
     def name(self, m: Monzo[int]) -> FJSName:
+        """Name an interval using FJS notation."""
+
         commas_ks = ((c, -x) for c, x in zip(self.commas, m.entries[2:]))
         pythagorean = Monzo.lin_comb((m, 1), *commas_ks)
 
@@ -67,11 +74,11 @@ class FJS:
 
             fifths_sign = (1 if fifths >= 0 else -1)
             abs_fifths = abs(fifths)
-            if abs_fifths <= 1: # P
+            if abs_fifths <= 1:  # P
                 variant = 0
-            elif abs_fifths <= 5: # m, M
+            elif abs_fifths <= 5:  # m, M
                 variant = 1
-            else: # d, A, dd, AA, ...
+            else:  # d, A, dd, AA, ...
                 variant = (abs_fifths + 8) // 7
 
             degree = (0, 4, 1, 5, 2, 6, 3)[fifths_m7]
@@ -80,7 +87,7 @@ class FJS:
         twos, threes = pythagorean.entry_at(0), pythagorean.entry_at(1)
         for candidate in ((twos, threes, 1), (-twos, -threes, -1)):
             variant, degree, octaves, sign = var_deg_oct_sign(*candidate)
-            if octaves >= 0: # avoid neg. octave shifts, use neg. degrees
+            if octaves >= 0:  # avoid neg. octave shifts, use neg. degrees
                 return FJSName(variant, (degree + octaves * 7) * sign,
                                otonal_commas, utonal_commas)
         assert False, 'Unreachable'
@@ -88,7 +95,9 @@ class FJS:
 @final
 @dataclass(frozen=True)
 class FJSName:
-    variant: int # P → 0, m → -1, M → +1, d → -2, A → +2, dd → -3, AA → +3…
+    """A unified FJS name representation, allowing to generate different string representations (use `str` or `format`)."""
+
+    variant: int  # P → 0, m → -1, M → +1, d → -2, A → +2, dd → -3, AA → +3…
     degree: int
     otonal_commas: tuple[int, ...]
     utonal_commas: tuple[int, ...]
@@ -121,7 +130,7 @@ class FJSName:
         return ''.join(segments)
 
 _format_data: Final[Mapping[str, tuple[str, str, str, str, str]]] = {
-    '': ('^', '', '_', '', ','), # ASCII
-    'h': ('<sup>', '</sup>', '<sub>', '</sub>', ','), # HTML
-    't': ('^{', '}{}', '_{', '}', '{,}'), # TeX
+    '': ('^', '', '_', '', ','),  # ASCII
+    'h': ('<sup>', '</sup>', '<sub>', '</sub>', ','),  # HTML
+    't': ('^{', '}{}', '_{', '}', '{,}'),  # TeX
 }
