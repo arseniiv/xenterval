@@ -6,4 +6,4 @@ def test_convergents() -> None:
     pi_convergents = list(convergents(pi))
     assert pi_convergents[:3] == [3, Fraction(22, 7), Fraction(333, 106)]
     assert pi_convergents[-1] == pi
-    assert convergents(0) == [0]
+    assert list(convergents(0)) == [0]
