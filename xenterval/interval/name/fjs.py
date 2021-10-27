@@ -3,9 +3,10 @@ from typing import final, Final, Sequence, Iterator, Mapping
 from dataclasses import dataclass
 from fractions import Fraction
 from math import log2, floor, sqrt
-from xenterval._common import KNOWN_PRIMES, Rat
+from xenterval.typing import Rat
 from xenterval.interval import Interval
 from xenterval.ji import Monzo
+from xenterval._primes import KNOWN_PRIMES
 
 __all__ = ('FJS', 'FJSName')
 

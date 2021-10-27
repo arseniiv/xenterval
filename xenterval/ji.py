@@ -5,7 +5,8 @@ from functools import cached_property, lru_cache
 from fractions import Fraction
 from math import prod
 from more_itertools import pairwise
-from xenterval._common import Rat, RatFloat, KNOWN_PRIMES, prime_index
+from xenterval.typing import Rat, RatFloat
+from xenterval._primes import KNOWN_PRIMES, prime_index, prime_faсtors
 
 __all__ = ('known_primes', 'known_prime_index', 'Monzo', 'JISubgroup',)
 
@@ -170,33 +171,19 @@ class Monzo(Generic[_TR]):
     @lru_cache
     def from_ratio(ratio: Rat) -> Monzo[int]:
         """Get a ratio’s monzo."""
-        # hopefully ratios wouldn’t get that complex;
-        # use a simple factorization method
 
-        def p_adic_val(n: int, p: int) -> tuple[int, int]:
-            """Returns (d_p(n), n / p ** d_p(n))."""
-            result = 0
-            while True:
-                quot, rem = divmod(n, p)
-                if rem != 0:
-                    break
-                n = quot
-                result += 1
-            return result, n
-
-        n, d = ratio.numerator, ratio.denominator
-        if n == 1 == d:
-            return Monzo()
-        if n <= 0:
-            raise ValueError('Ratio should be positive.')
+        factorization = dict(prime_faсtors(ratio))
         entries: list[int] = []
         for p in KNOWN_PRIMES:
-            pos_exp, n = p_adic_val(n, p)
-            neg_exp, d = p_adic_val(d, p)
-            entries.append(pos_exp - neg_exp)
-            if n == 1 == d:
+            if not factorization:
                 return Monzo(*entries)
-        raise ValueError('This ratio contains large primes I don’t know.')
+            d = factorization.get(p)
+            if d is not None:
+                del factorization[p]
+            entries.append(d or 0)
+
+        assert not factorization
+        return Monzo(*entries)
 
 
 #TODO: Val, norms, multiplication?

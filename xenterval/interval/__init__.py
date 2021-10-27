@@ -1,9 +1,13 @@
 from __future__ import annotations
-from typing import Any, Callable, Final, Iterable, Sequence, SupportsAbs, cast, final, Literal, overload
-from dataclasses import dataclass
+from functools import cached_property
+from typing import Final, Iterator, final, Literal, overload
 from fractions import Fraction
-from math import isfinite, log2, floor
-from xenterval._common import Rat, RatFloat
+from math import isfinite, log, log2, floor, prod
+from types import MappingProxyType
+from more_itertools import all_equal
+from xenterval.typing import Rat, RatFloat, Factors
+from xenterval._primes import prime_faсtors
+from xenterval._ratios import convergents
 
 __all__ = ('interval', 'Interval',)
 
@@ -22,7 +26,7 @@ def _parse_ratfloat(s: str, prefer_fraction: bool = False) -> RatFloat | None:
     return None
 
 
-#TODO? Use prime factorization with rational exponents like <https://github.com/m-yac/microtonal-utils> does? Then refactor what `Monzo` class is for
+#TODO? Now refactor what `Monzo` class is for
 
 @overload
 def interval(s: str) -> Interval:
@@ -38,7 +42,7 @@ def interval(x, y=None):
     interval('7/5') == ^
     interval('3.1416') == Interval.from_ratio(3.1416)
     interval('700c') == Interval.from_cents(700)
-    interval('6\\22') == Interval.from_edo_steps(6, 22)
+    interval('6\\22') == Interval.from_edx_steps(6, 22, period=2)
     ```
     """
 
@@ -55,7 +59,7 @@ def interval(x, y=None):
             parse = lambda s: _parse_ratfloat(s, prefer_fraction=True)
             steps, edo = parse(steps_s), parse(edo_s)
             if steps is not None and edo is not None:
-                return Interval.from_edo_steps(steps, edo)
+                return Interval.from_edx_steps(steps, edo)
         except ValueError:
             pass
         raise ValueError('Unknown format.')
@@ -66,58 +70,155 @@ def interval(x, y=None):
     raise TypeError('Wrong arguments, expected str or two ints.')
 
 
+def _count_nones(*xs: object) -> int:
+    return sum(1 if x is None else 0 for x in xs)
+
+
 @final
-@dataclass(eq=False, order=False, frozen=True, slots=True)
 class Interval:
     """A musical interval.
 
     To construct instances, use:
-    * `Interval(cents=cent_val)` or `Interval(ratio=ratio_val)`
-    or, if you’re surely consistent, specify both.
-    * static method `from_edo_steps`
+    * `Interval(cents=750)`
+    * `Interval(ratio=Fraction(7, 5))`
+    * `Interval(factorization={2: -4, 3: 1, 7: 1})`
+    * static methods `zero()`, `from_edx_steps(m, n, p=2)`
 
-    `cents`, `ratio` and `edo_steps(n)` are the corresponding
-    numeric values. Intervals support arithmetic and comparison.
+    The corresponding accessors are `cents`, `ratio`, `edx_steps(n, p=2)`, `factorization`.
+    Intervals support arithmetic and comparison.
     """
 
-    cents: RatFloat
-    ratio: RatFloat
-
-    def __init__(self, cents: RatFloat | None = None,
+    def __init__(self, factorization: Factors | None = None,
+                       *,
+                       cents: RatFloat | None = None,
                        ratio: RatFloat | None = None) -> None:
-        if ratio is None:
-            r_octaves = None
-            ratio_goodness: Literal[0, 1, 2] = 0
-        elif isfinite(ratio) and ratio > 0:
-            r_octaves = log2(ratio)
-            if isinstance(r_octaves, float) and r_octaves % 1 == 0:
-                r_octaves = floor(r_octaves)
-            ratio_goodness = 1 if isinstance(ratio, float) else 2
+        if _count_nones(factorization, cents, ratio) != 2:
+            raise ValueError('Just a single one of factorization, cents and ratio should be defined.')
+
+        MAGIC: Final = 3600  # well
+
+        if factorization is not None:
+            fact: Factors | float = factorization
+        elif ratio is not None:
+            if not isfinite(ratio) or ratio <= 0:
+                raise ValueError('Ratio should be positive and finite.')
+            if (ratio * MAGIC) % 1 == 0:
+                ratio = Fraction(floor(ratio * MAGIC), MAGIC)
+            if isinstance(ratio, int | Fraction):
+                fact = prime_faсtors(ratio)
+            else:
+                cents = log2(ratio) * 1200
+                if cents % 1 != 0:
+                    fact = ratio
+        elif cents is not None:
+            if (cents * MAGIC) % 1 == 0:
+                cents = Fraction(floor(cents * MAGIC), MAGIC)
+            if isinstance(cents, float):
+                fact = 2 ** (cents / 1200)
+            elif cents:
+                fact = {2: Fraction(cents, 1200)}
+            else:
+                fact = {}
+
+        if not isinstance(fact, float):
+            if 0 in fact.values():
+                fact = {p: d for p, d in fact.items() if d != 0}
+            if not isinstance(fact, MappingProxyType):
+                fact = MappingProxyType(fact)
+        self._fact: Final[Factors | float] = fact
+
+    def _is_rational(self) -> Rat | None:
+        """Returns `int` or `Fraction` representing this interval accurately, or `None` otherwise."""
+
+        if isinstance(self._fact, float):
+            return None
+
+        m, n = 1, 1
+        for p, d in self._fact.items():
+            if not isinstance(d, int):
+                return None
+            if d > 0:
+                m *= p ** d
+            else:
+                n *= p ** -d
+        return Fraction(m, n) if n != 1 else m
+
+    def _is_multiple_of(self, ratio: Rat | Factors) -> Rat | None:
+        """If this interval is an `int` or `Fractional` power of a given ratio, returns the exponent, or `None` otherwise."""
+
+        if isinstance(self._fact, float):
+            return None
+
+        if isinstance(ratio, int | Fraction):
+            ratio_fact: Factors = prime_faсtors(ratio)
         else:
-            raise ValueError('Ratio should be positive and finite.')
+            ratio_fact = ratio
 
-        if cents is None:
-            c_octaves = None
-            cents_goodness: Literal[0, 1, 2] = 0
-        else:
-            cents = Fraction(cents) if isinstance(cents, int) else cents
-            c_octaves = cents / 1200
-            cents_goodness = 1 if isinstance(cents, float) else 2
+        exp_multipliers = [Fraction(self._fact.get(p, 0), d)
+                           for p, d in ratio_fact.items()]
+        if not all_equal(exp_multipliers):
+            return None
+        if not self._fact.keys() <= ratio_fact.keys():
+            return None
+        return exp_multipliers[0] if exp_multipliers else 0
 
-        if cents is None is ratio:
-            raise ValueError('At least one of cents or ratio should be present.')
-        if (r_octaves is not None and
-            c_octaves is not None and
-            abs(r_octaves - c_octaves) > 1e-8):
-            raise ValueError('Cents and ratio should represent the same interval with good precision.')
+    @property
+    def factorization(self) -> Factors | None:
+        """Factorization of this interval, if any.
 
-        if cents_goodness < ratio_goodness:
-            cents = 1200 * cast(RatFloat, r_octaves)
-        if ratio_goodness < cents_goodness:
-            ratio = 2 ** cast(RatFloat, c_octaves)
+        `interval('14/9').factorization == {2: 1, 3: -2, 7: 1}`
+        `interval('400c').factorization == {2: Fraction(1, 3)}`"""
+        if isinstance(self._fact, float):
+            return None
+        return self._fact
 
-        object.__setattr__(self, 'cents', cents)
-        object.__setattr__(self, 'ratio', ratio)
+    @cached_property
+    def ratio(self) -> RatFloat:
+        """This interval as a ratio."""
+
+        exact_ratio = self._is_rational()
+        if exact_ratio is not None:
+            return exact_ratio
+        if isinstance(self._fact, float):
+            return self._fact
+        return prod(p ** d for p, d in self._fact.items())
+
+    def edx_steps(self, divisions: RatFloat,
+                  period: RatFloat = 2) -> RatFloat:
+        """This interval measured in steps of a given edX where X is `period` and defaults to 2 (thus, an edo)."""
+
+        if (isinstance(divisions, int | Fraction) and
+            isinstance(period, int | Fraction)):
+            exact_steps = self._is_multiple_of(period)
+            if exact_steps is not None:
+                return exact_steps * divisions
+        return log(self.ratio, period) * divisions
+
+    @cached_property
+    def cents(self) -> RatFloat:
+        """This interval measured in cents."""
+
+        return self.edx_steps(1200, 2)
+
+    @staticmethod
+    def zero() -> Interval:
+        """A zero interval (unison)."""
+
+        return Interval({})
+
+    @staticmethod
+    def from_edx_steps(steps: RatFloat, divisions: RatFloat,
+                       period: RatFloat = 2) -> Interval:
+        """Construct an interval from an amount of edX steps where X, `period`, defaults to 2 (thus, an edo)."""
+
+        if isinstance(steps, int):
+            steps = Fraction(steps)
+        return Interval(ratio=period) * (steps / divisions)
+
+    def __repr__(self) -> str:
+        if isinstance(self._fact, float):
+            return f'Interval(ratio={self._fact})'
+        return f'Interval({dict(self._fact)})'
 
     def __str__(self) -> str:
         cents, ratio = self.cents, self.ratio
@@ -143,7 +244,7 @@ class Interval:
                 return str(self.ratio)
             cents = self.cents
             if isinstance(cents, int | Fraction):
-                x = self.edo_steps(1)
+                x = self.edx_steps(1)
                 if isinstance(x, int | Fraction):
                     return f'{x.numerator}\\{x.denominator}'
                 if isinstance(cents, int):
@@ -151,38 +252,6 @@ class Interval:
             return f'{float(cents)}¢'
         raise ValueError(f'Unknown format spec: {spec}. Use "", "c", "r" or "p".')
 
-    def edo_steps(self, edo: RatFloat) -> RatFloat:
-        """This interval measured in steps of a given edo."""
-
-        x = self.cents * edo
-        if isinstance(x, int):
-            return Fraction(x, 1200)
-        return x / 1200
-
-    @staticmethod
-    def zero() -> Interval:
-        """A zero interval (unison)."""
-
-        return Interval(0, 1)
-
-    @staticmethod
-    def from_edo_steps(steps: RatFloat,
-                       edo: RatFloat) -> Interval:
-        """Construct an interval steps\\edo."""
-
-        octaves: RatFloat
-        # match steps, edo:
-        #     case int(), int():
-        #         octaves = Fraction(steps, edo)
-        #     case _:
-        #         octaves = steps / edo
-        #TODO replace with match when mypy is ready!
-        if isinstance(steps, int) and isinstance(edo, int):
-            # if at least one is a `Fraction`, `/` is enough, but not here
-            octaves = Fraction(steps, edo)
-        else:
-            octaves = steps / edo
-        return Interval(octaves * 1200, None)
 
     @overload
     def stack(self, other: Interval) -> Interval:
@@ -197,17 +266,18 @@ class Interval:
         Also use: binary `+` `-`
         """
 
-        ratio, cents = self.ratio, self.cents
-        # match other:
-        #     case Interval(cents2, ratio2):
-        #         return Interval(cents + cents2, ratio * ratio2)
-        #     case float(freq):
-        #         return freq * ratio
         #TODO replace with match when mypy is ready!
         if isinstance(other, Interval):
-            return Interval(cents + other.cents, ratio * other.ratio)
+            # pylint: disable=protected-access
+            fact1, fact2 = self._fact, other._fact
+            if (not isinstance(fact1, float) and
+                not isinstance(fact2, float)):
+                fact = {p: fact1.get(p, 0) + fact2.get(p, 0)
+                        for p in fact1.keys() | fact2.keys()}
+                return Interval(fact)
+            return Interval(ratio=self.ratio * other.ratio)
         elif isinstance(other, int | float):
-            return other * ratio
+            return self.ratio * other
 
 
     def multiply(self, other: RatFloat) -> Interval:
@@ -215,7 +285,11 @@ class Interval:
 
         Also use: `*` `/`
         """
-        return Interval(self.cents * other, self.ratio ** other)
+
+        fact = self._fact
+        if not isinstance(fact, float) and not isinstance(other, float):
+            return Interval({p: d * other for p, d in fact.items()})
+        return Interval(ratio=self.ratio ** other)
 
     def stretch_factor(self, other: Interval) -> RatFloat:
         """How much should this interval stretch to become another.
@@ -224,9 +298,11 @@ class Interval:
         Also use: `/`
         """
 
-        if isinstance(self.cents, int) and isinstance(other.cents, int):
-            return Fraction(other.cents, self.cents)
-        return other.cents / self.cents
+        if not isinstance(self._fact, float):
+            exact_stretch = other._is_multiple_of(self._fact)
+            if exact_stretch is not None:
+                return exact_stretch
+        return log(other.ratio, self.ratio)
 
     @property
     def inverse(self: Interval) -> Interval:
@@ -250,19 +326,28 @@ class Interval:
         Also use: `divmod` function
         """
 
-        periods, reduced_cents = divmod(self.cents, period.cents)
-        if (isinstance(self.ratio, int | Fraction) and
-            isinstance(period.ratio, int | Fraction)):
-            period_ratio = Fraction(period.ratio)
-            periods, reduced_ratio = 0, self.ratio
-            while reduced_ratio >= period_ratio:
-                periods += 1
-                reduced_ratio /= period_ratio
-            while reduced_ratio < 1:
-                periods -= 1
-                reduced_ratio *= period_ratio
-            return periods, Interval(reduced_cents, reduced_ratio)
-        return floor(periods), Interval(reduced_cents, None)
+        if period.ratio == 1:
+            raise ZeroDivisionError('Period should not be an unison.')
+
+        upwards = True
+        if period.ratio < 1:
+            upwards = False
+            self = self.inverse  # pylint: disable=self-cls-assignment
+            period = period.inverse
+
+        quot = floor(self.cents // period.cents)
+        rem = self - period * quot
+
+        # let’s protect ourselves from possible floating-point inaccuracies
+        if rem.ratio < 1:
+            rem += period
+            quot += 1
+        elif rem >= period:
+            rem -= period
+            quot -= 1
+
+        assert rem.ratio >= 1 and rem < period
+        return quot, (rem if upwards else rem.inverse)
 
     @property
     def _coarse_cents(self) -> float:
@@ -349,7 +434,7 @@ class Interval:
 
         ```
         self / num == self.multiply(1 / num)
-        intv / self == intv.stretch_factor(self)
+        self / intv == intv.stretch_factor(self)
         ```
         """
 
@@ -425,15 +510,27 @@ class Interval:
     def __abs__(self) -> Interval:
         """If this interval is downwards, invert it; otherwise return as it is. The result always goes upwards."""
 
-        ratio = self.ratio
-        if isinstance(ratio, int):
-            ratio = Fraction(ratio)
-        cents: SupportsAbs[RatFloat] = self.cents
-        return Interval(abs(cents), 1 / ratio if ratio < 1 else ratio)
+        return self if self.ratio > 1 else self.inverse
 
-    def approximate_in_edo(self, edo: int) -> tuple[Interval, Interval]:
-        """Approximate this interval in a given edo, returning the approximation and the error."""
+    def approximate_in_edx(self, divisions: RatFloat,
+                           period: RatFloat = 2) -> tuple[int, Interval]:
+        """Approximate this interval in a given edX, returning the closest number of steps and the error.
 
-        steps = self.edo_steps(edo)
-        edo_approx = Interval.from_edo_steps(round(steps), edo)
-        return edo_approx, edo_approx - self
+        X, `period`, defaults to 2 (thus, an edo)."""
+
+        steps = round(self.edx_steps(divisions, period))
+        approx = Interval.from_edx_steps(steps, divisions, period)
+        return steps, approx - self
+
+    def ratio_convergents(self) -> Iterator[tuple[Rat, Interval]]:
+        """Give successive rational approximations (via convergents) of this interval, yielding pairs (ratio, error)."""
+
+        for c in convergents(self.ratio):
+            yield c, Interval(ratio=float(c)) - self
+
+    def edx_convergents(self, period: RatFloat = 2) -> Iterator[tuple[Rat, Interval]]:
+        """Give successive approximations (via convergents) of this interval in various edX with the given period, yielding pairs (steps/divisions, error)."""
+
+        edx_steps = self.edx_steps(1, period)
+        for c in convergents(edx_steps):
+            yield c, Interval.from_edx_steps(c, 1, period) - self

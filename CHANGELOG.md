@@ -27,3 +27,11 @@ Initial release.
 * Finally, unit tests. And what revelations have they brought!
 * `JISubgroup` got more usable: now you can test for subgroup containment or isomorphism of two groups.
 * Typos (and off-by-1 errors, ugh) as always.
+
+## 0.2.1
+
+* Factored out typing annotations which clients may find useful into `xenterval.typing` from an internal module.
+* New interval representation as a product of prime powers, borrowed from <https://github.com/m-yac/microtonal-utils>. Now not only intervals from edos can be manipulated without loss of precision, but also intervals from other edXs with rational periods.
+* Disposed with `edo` attributes, replacing them with `edx` extended counterparts. The period of an edX there defaults to 2, though.
+* `Monzo` is now a bit overreaching, as we now have prime decomposition info in the `Interval` itself. I’ll investigate refactoring possibilities later.
+* Successive interval approximations: `Interval.ratio_convergents` to give ratios and `Interval.edx_convergents` to give steps\division fractions for the given period.

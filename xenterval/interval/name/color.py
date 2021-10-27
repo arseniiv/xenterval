@@ -2,9 +2,9 @@ from __future__ import annotations
 from typing import Final, Iterator, Mapping
 from functools import lru_cache
 from math import floor
-from xenterval._common import KNOWN_PRIMES
 from xenterval.interval import Interval
 from xenterval.ji import Monzo
+from xenterval._primes import KNOWN_PRIMES
 
 __all__ = ('color_name', 'color_val')
 
