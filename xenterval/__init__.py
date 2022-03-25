@@ -21,8 +21,7 @@ __version__ = '0.2.1'
 # <https://en.xen.wiki/w/Interval_calculator>
 # <https://untwelve.org/interval_calc>
 # <https://www.yacavone.net/xen-calc>
-# convergents (and semi-convergents) to arbitrary intervals?
-# edo-step (“)convergents(”)?
+# NB semi-convergents?
 
 
 if __name__ == '__main__':

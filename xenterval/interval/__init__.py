@@ -299,6 +299,7 @@ class Interval:
         """
 
         if not isinstance(self._fact, float):
+            # pylint: disable=protected-access
             exact_stretch = other._is_multiple_of(self._fact)
             if exact_stretch is not None:
                 return exact_stretch

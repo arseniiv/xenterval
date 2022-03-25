@@ -14,7 +14,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Mathematics",
     "Topic :: Text Processing",
     "Topic :: Utilities",
-    "Typing :: Typed"
+    "Typing :: Typed",
 ]
 include = ["CHANGELOG.md"]
 
